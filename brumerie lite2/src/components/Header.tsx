@@ -15,17 +15,35 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
   return (
     <header className="bg-white sticky top-0 z-50 border-b border-gray-100">
       <div className="px-4 pt-4 pb-3">
+
         {/* Top row */}
         <div className="flex items-center justify-between mb-3">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-700 to-green-500 flex items-center justify-center shadow-green">
-              <span className="text-white font-bold text-sm" style={{fontFamily:'Syne,sans-serif'}}>B</span>
-            </div>
-            <span className="text-xl font-bold gradient-text" style={{fontFamily:'Syne,sans-serif'}}>Brumerie</span>
+
+          {/* Logo horizontal */}
+          <div className="flex items-center">
+            <img
+              src="/assets/logos/logo-horizontal.png"
+              alt="Brumerie"
+              className="h-9 w-auto object-contain"
+              onError={(e) => {
+                // Fallback si l'image n'est pas encore uploadée
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  parent.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#15803D,#22C55E);display:flex;align-items:center;justify-content:center">
+                        <span style="color:white;font-weight:800;font-size:14px;font-family:Syne,sans-serif">B</span>
+                      </div>
+                      <span style="font-size:20px;font-weight:800;font-family:Syne,sans-serif;background:linear-gradient(135deg,#15803D,#16A34A);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Brumerie</span>
+                    </div>
+                  `;
+                }
+              }}
+            />
           </div>
 
-          {/* Right actions */}
+          {/* Avatar utilisateur */}
           <div className="flex items-center gap-2">
             {userProfile && (
               <button
@@ -33,23 +51,31 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
                 className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-green-100 hover:border-green-500 transition-all duration-200"
               >
                 {userProfile.photoURL ? (
-                  <img src={userProfile.photoURL} alt={userProfile.name} className="w-full h-full object-cover" />
+                  <img
+                    src={userProfile.photoURL}
+                    alt={userProfile.name}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center">
-                    <span className="text-green-600 font-bold text-sm">{userProfile.name?.charAt(0)?.toUpperCase()}</span>
+                  <div className="w-full h-full bg-green-50 flex items-center justify-center">
+                    <span className="text-green-600 font-bold text-sm">
+                      {userProfile.name?.charAt(0)?.toUpperCase()}
+                    </span>
                   </div>
                 )}
                 {userProfile.isVerified && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
                 )}
               </button>
             )}
           </div>
         </div>
 
-        {/* Search bar */}
+        {/* Barre de recherche */}
         <div className={`relative transition-all duration-200 ${focused ? 'scale-[1.01]' : ''}`}>
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">🔍</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">
+            🔍
+          </span>
           <input
             type="text"
             placeholder="Chercher un article, une marque..."
@@ -68,6 +94,7 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
             </button>
           )}
         </div>
+
       </div>
     </header>
   );

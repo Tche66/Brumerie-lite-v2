@@ -1,11 +1,12 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
+import {
   User as FirebaseUser,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
-  onAuthStateChanged
+  sendPasswordResetEmail,
+  onAuthStateChanged,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
@@ -18,6 +19,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, userData: Partial<User>) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const uid = userCredential.user.uid;
 
-    // Créer profil Firestore
     const newUser: User = {
       id: uid,
       email,
@@ -69,6 +70,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signOut() {
     await firebaseSignOut(auth);
     setUserProfile(null);
+  }
+
+  // Réinitialisation mot de passe
+  async function resetPassword(email: string) {
+    await sendPasswordResetEmail(auth, email);
   }
 
   // Charger profil utilisateur
@@ -101,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signIn,
     signOut,
+    resetPassword,
   };
 
   return (

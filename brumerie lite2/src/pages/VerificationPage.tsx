@@ -9,7 +9,7 @@ interface VerificationPageProps {
 }
 
 const STEPS_INFO = [
-  { icon: '💳', title: 'Paiement Mobile Money', desc: `Envoie ${VERIFICATION_PRICE.toLocaleString('fr-FR')} FCFA via Wave ou Orange Money au +225 08 68 67 693` },
+  { icon: '💳', title: 'Paiement Mobile Money', desc: `Envoie ${VERIFICATION_PRICE.toLocaleString('fr-FR')} FCFA via Wave ou Orange Money au +225 05 86 86 7693` },
   { icon: '📲', title: 'Contact WhatsApp', desc: "Appuie sur le bouton ci-dessous pour envoyer ta demande avec ton reçu de paiement en photo" },
   { icon: '✅', title: 'Activation sous 24h', desc: "Notre équipe vérifie et active ton badge. Tu recevras une confirmation par WhatsApp" },
 ];
@@ -119,7 +119,7 @@ export function VerificationPage({ onBack }: VerificationPageProps) {
               <p className="text-amber-800 text-sm font-medium mb-2">💰 Paiement Mobile Money</p>
               <div className="space-y-1">
                 <p className="text-amber-700 text-sm">Wave CI · Orange Money</p>
-                <p className="text-amber-900 font-bold">📱 +225 08 68 67 693</p>
+                <p className="text-amber-900 font-bold">📱 +225 05 86 86 7693</p>
                 <p className="text-amber-600 text-xs">Nom : Brumerie · Motif : Badge Vérification</p>
               </div>
             </div>
