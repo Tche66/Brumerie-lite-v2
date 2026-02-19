@@ -1,0 +1,18 @@
+{
+  "name": "Brumerie - Marketplace Locale",
+  "short_name": "Brumerie",
+  "description": "Marketplace locale de confiance en Côte d'Ivoire",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#9333ea",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
