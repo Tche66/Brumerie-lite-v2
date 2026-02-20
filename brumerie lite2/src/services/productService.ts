@@ -13,26 +13,42 @@ import {
   Timestamp,
   increment
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/config/firebase';
+import { db } from '@/config/firebase';
 import { Product } from '@/types';
 
 /**
- * Publier un nouveau produit
+ * Publier un nouveau produit avec Cloudinary
  */
 export async function createProduct(
   productData: Omit<Product, 'id' | 'createdAt' | 'whatsappClickCount' | 'status'>,
   imageFiles: File[]
 ): Promise<string> {
   try {
+    // 1. Upload images vers Cloudinary
     const imageUrls: string[] = [];
+    
     for (const file of imageFiles) {
-      const imageRef = ref(storage, `products/${productData.sellerId}/${Date.now()}_${file.name}`);
-      await uploadBytes(imageRef, file);
-      const url = await getDownloadURL(imageRef);
-      imageUrls.push(url);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de l\'upload vers Cloudinary');
+      }
+
+      const data = await response.json();
+      imageUrls.push(data.secure_url); // On récupère l'URL publique Cloudinary
     }
 
+    // 2. Créer le produit dans Firestore
     const product = {
       ...productData,
       images: imageUrls,
@@ -43,6 +59,7 @@ export async function createProduct(
 
     const docRef = await addDoc(collection(db, 'products'), product);
 
+    // 3. Incrémenter le compteur de l'utilisateur
     await updateDoc(doc(db, 'users', productData.sellerId), {
       publicationCount: increment(1),
     });
@@ -55,7 +72,7 @@ export async function createProduct(
 }
 
 /**
- * Récupérer tous les produits (Accueil)
+ * Récupérer tous les produits (Page d'accueil)
  */
 export async function getProducts(filters?: {
   category?: string;
@@ -79,6 +96,7 @@ export async function getProducts(filters?: {
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
+    // Tri manuel par date (récent -> ancien)
     products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     if (filters?.searchTerm) {
@@ -96,7 +114,7 @@ export async function getProducts(filters?: {
 }
 
 /**
- * Récupérer les produits d'un vendeur (Profil)
+ * Récupérer les produits d'un vendeur (Page Profil)
  */
 export async function getSellerProducts(sellerId: string): Promise<Product[]> {
   try {
@@ -111,6 +129,7 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
       ...doc.data(),
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
+    
     return products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error('Error getting seller products:', error);
@@ -119,7 +138,7 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
 }
 
 /**
- * Marquer un produit comme vendu
+ * Marquer comme vendu
  */
 export async function markProductAsSold(productId: string): Promise<void> {
   try {
@@ -131,7 +150,7 @@ export async function markProductAsSold(productId: string): Promise<void> {
 }
 
 /**
- * Supprimer un produit (Réajouté pour corriger l'erreur de build)
+ * Supprimer un produit
  */
 export async function deleteProduct(productId: string, sellerId: string): Promise<void> {
   try {
@@ -144,7 +163,7 @@ export async function deleteProduct(productId: string, sellerId: string): Promis
 }
 
 /**
- * Utilitaires restants
+ * Compteur WhatsApp
  */
 export async function incrementWhatsAppClick(productId: string): Promise<void> {
   try {
@@ -154,6 +173,9 @@ export async function incrementWhatsAppClick(productId: string): Promise<void> {
   }
 }
 
+/**
+ * Limite de publication
+ */
 export async function canUserPublish(userId: string): Promise<{
   canPublish: boolean;
   reason?: string;
@@ -163,24 +185,30 @@ export async function canUserPublish(userId: string): Promise<{
   try {
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) return { canPublish: false, reason: 'Utilisateur non trouvé', count: 0, limit: 0 };
+    
     const userData = userDoc.data();
     const count = userData.publicationCount || 0;
     const limit = userData.publicationLimit || 50;
     const lastReset = userData.lastPublicationReset?.toDate() || new Date(0);
     const now = new Date();
+
     if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
       await updateDoc(doc(db, 'users', userId), { publicationCount: 0, lastPublicationReset: serverTimestamp() });
       return { canPublish: true, count: 0, limit };
     }
-    if (count >= limit) return { canPublish: false, reason: `Limite atteinte`, count, limit };
+
+    if (count >= limit) return { canPublish: false, reason: `Limite mensuelle atteinte`, count, limit };
     return { canPublish: true, count, limit };
   } catch (error) {
-    return { canPublish: false, reason: 'Erreur', count: 0, limit: 0 };
+    return { canPublish: false, reason: 'Erreur technique', count: 0, limit: 0 };
   }
 }
 
+/**
+ * Services Externes (WhatsApp & Email)
+ */
 export function requestVerificationViaWhatsApp(user: { name: string; phone: string }) {
-  const msg = `🏅 Demande de badge Vendeur Vérifié - ${user.name}`;
+  const msg = `🏅 *Demande de badge Vendeur Vérifié - Brumerie*\n👤 Nom : ${user.name}\n📱 Tél : ${user.phone}`;
   return `https://wa.me/22586867693?text=${encodeURIComponent(msg)}`;
 }
 
