@@ -8,6 +8,7 @@ import {
   query,
   where,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   Timestamp,
   increment
@@ -54,7 +55,7 @@ export async function createProduct(
 }
 
 /**
- * Récupérer tous les produits (Page d'accueil) - UNE SEULE FOIS
+ * Récupérer tous les produits (Accueil)
  */
 export async function getProducts(filters?: {
   category?: string;
@@ -62,15 +63,11 @@ export async function getProducts(filters?: {
   searchTerm?: string;
 }): Promise<Product[]> {
   try {
-    let q = query(
-      collection(db, 'products'),
-      where('status', '==', 'active')
-    );
+    let q = query(collection(db, 'products'), where('status', '==', 'active'));
 
     if (filters?.category && filters.category !== 'all') {
       q = query(q, where('category', '==', filters.category));
     }
-
     if (filters?.neighborhood && filters.neighborhood !== 'all') {
       q = query(q, where('neighborhood', '==', filters.neighborhood));
     }
@@ -82,7 +79,6 @@ export async function getProducts(filters?: {
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
-    // Tri manuel par date
     products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     if (filters?.searchTerm) {
@@ -92,7 +88,6 @@ export async function getProducts(filters?: {
         p.description.toLowerCase().includes(searchLower)
       );
     }
-
     return products;
   } catch (error) {
     console.error('Error getting products:', error);
@@ -101,7 +96,7 @@ export async function getProducts(filters?: {
 }
 
 /**
- * Récupérer les produits d'un vendeur (Page Profil)
+ * Récupérer les produits d'un vendeur (Profil)
  */
 export async function getSellerProducts(sellerId: string): Promise<Product[]> {
   try {
@@ -110,14 +105,12 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
       where('sellerId', '==', sellerId),
       where('status', '==', 'active')
     );
-
     const snapshot = await getDocs(q);
     const products = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
-
     return products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error('Error getting seller products:', error);
@@ -130,9 +123,7 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
  */
 export async function markProductAsSold(productId: string): Promise<void> {
   try {
-    await updateDoc(doc(db, 'products', productId), {
-      status: 'sold',
-    });
+    await updateDoc(doc(db, 'products', productId), { status: 'sold' });
   } catch (error) {
     console.error('Error marking product as sold:', error);
     throw error;
@@ -140,21 +131,29 @@ export async function markProductAsSold(productId: string): Promise<void> {
 }
 
 /**
- * Incrémenter le compteur de clics WhatsApp
+ * Supprimer un produit (Réajouté pour corriger l'erreur de build)
+ */
+export async function deleteProduct(productId: string, sellerId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'products', productId), { status: 'deleted' });
+    await updateDoc(doc(db, 'users', sellerId), { publicationCount: increment(-1) });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    throw error;
+  }
+}
+
+/**
+ * Utilitaires restants
  */
 export async function incrementWhatsAppClick(productId: string): Promise<void> {
   try {
-    await updateDoc(doc(db, 'products', productId), {
-      whatsappClickCount: increment(1),
-    });
+    await updateDoc(doc(db, 'products', productId), { whatsappClickCount: increment(1) });
   } catch (error) {
     console.error('Error incrementing WhatsApp click:', error);
   }
 }
 
-/**
- * Vérifier si l'utilisateur peut publier
- */
 export async function canUserPublish(userId: string): Promise<{
   canPublish: boolean;
   reason?: string;
@@ -163,40 +162,25 @@ export async function canUserPublish(userId: string): Promise<{
 }> {
   try {
     const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) {
-      return { canPublish: false, reason: 'Utilisateur non trouvé', count: 0, limit: 0 };
-    }
-
+    if (!userDoc.exists()) return { canPublish: false, reason: 'Utilisateur non trouvé', count: 0, limit: 0 };
     const userData = userDoc.data();
     const count = userData.publicationCount || 0;
     const limit = userData.publicationLimit || 50;
     const lastReset = userData.lastPublicationReset?.toDate() || new Date(0);
     const now = new Date();
-
     if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
-      await updateDoc(doc(db, 'users', userId), {
-        publicationCount: 0,
-        lastPublicationReset: serverTimestamp(),
-      });
+      await updateDoc(doc(db, 'users', userId), { publicationCount: 0, lastPublicationReset: serverTimestamp() });
       return { canPublish: true, count: 0, limit };
     }
-
-    if (count >= limit) {
-      return { canPublish: false, reason: `Limite atteinte (${limit} produits/mois)`, count, limit };
-    }
-
+    if (count >= limit) return { canPublish: false, reason: `Limite atteinte`, count, limit };
     return { canPublish: true, count, limit };
   } catch (error) {
-    console.error('Error checking publication limit:', error);
-    return { canPublish: false, reason: 'Erreur de vérification', count: 0, limit: 0 };
+    return { canPublish: false, reason: 'Erreur', count: 0, limit: 0 };
   }
 }
 
-/**
- * WhatsApp & Feedback Services
- */
-export function requestVerificationViaWhatsApp(user: { name: string; email: string; phone: string }) {
-  const msg = `🏅 *Demande de badge Vendeur Vérifié - Brumerie*\n\n👤 Nom : ${user.name}\n📱 Tél : ${user.phone}\n\nJe souhaite activer mon badge.`;
+export function requestVerificationViaWhatsApp(user: { name: string; phone: string }) {
+  const msg = `🏅 Demande de badge Vendeur Vérifié - ${user.name}`;
   return `https://wa.me/22586867693?text=${encodeURIComponent(msg)}`;
 }
 
