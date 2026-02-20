@@ -123,9 +123,10 @@ export function SellPage({ onClose, onSuccess }: SellPageProps) {
 
       setSuccess(true);
       setTimeout(() => onSuccess(), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Erreur lors de la publication. Vérifie ta connexion.');
+      // On affiche l'erreur en clair sur ton téléphone
+      setError(`Détails : ${err.message || 'Erreur inconnue'}`);
     } finally {
       setLoading(false);
     }
