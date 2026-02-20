@@ -78,11 +78,32 @@ export function SellPage({ onClose, onSuccess }: SellPageProps) {
     return false;
   };
 
-  const handleSubmit = async () => {
+    const handleSubmit = async () => {
     if (!userProfile || !canPublish) return;
     setLoading(true);
     setError('');
+    
     try {
+      // 1. Envoyer les images vers Cloudinary
+      const uploadedImageUrls: string[] = [];
+      
+      for (const file of images) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'brumerie_preset'); // Ton preset
+        
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/dk8kfgmqx/image/upload`, // Ton Cloud Name
+          { method: 'POST', body: formData }
+        );
+        
+        if (!response.ok) throw new Error("Échec de l'upload image");
+        
+        const data = await response.json();
+        uploadedImageUrls.push(data.secure_url);
+      }
+
+      // 2. Créer le produit dans Firestore avec les liens Cloudinary
       await createProduct(
         {
           title: title.trim(),
@@ -95,14 +116,16 @@ export function SellPage({ onClose, onSuccess }: SellPageProps) {
           sellerPhone: userProfile.phone,
           sellerPhoto: userProfile.photoURL,
           sellerVerified: userProfile.isVerified,
-          images: [],
+          images: uploadedImageUrls, // On envoie les URLs Cloudinary ici !
         },
-        images
+        [] // On envoie un tableau vide ici pour que productService n'essaie pas d'utiliser Firebase Storage
       );
+
       setSuccess(true);
       setTimeout(() => onSuccess(), 2000);
     } catch (err) {
-      setError('Erreur lors de la publication. Réessaie.');
+      console.error(err);
+      setError('Erreur lors de la publication. Vérifie ta connexion.');
     } finally {
       setLoading(false);
     }
