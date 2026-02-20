@@ -25,48 +25,43 @@ export async function createProduct(
   try {
     const imageUrls: string[] = [];
     
-    // 1. Upload vers Cloudinary
+    // 1. Diagnostic de l'upload
     for (const file of imageFiles) {
       const formData = new FormData();
       formData.append('file', file);
-      // On utilise la variable Netlify ou 'ml_default' par défaut
-      const preset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
-      formData.append('upload_preset', preset);
+      // ON MET LE PRESET EN DUR POUR ÉVITER LES ERREURS DE VARIABLES
+      formData.append('upload_preset', 'Brumerie_preset'); 
 
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/dk8kfgmqx/image/upload`, // Cloud Name forcé ici
+        `https://api.cloudinary.com/v1_1/dk8kfgmqx/image/upload`,
         { method: 'POST', body: formData }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorDetail = await response.json();
-        console.error('Erreur Cloudinary détaillée:', errorDetail);
-        throw new Error('Échec de l\'envoi de l\'image');
+        // Cette alerte va s'afficher sur ton téléphone s'il y a une erreur
+        alert("Erreur Cloudinary : " + (data.error?.message || "Inconnue"));
+        throw new Error('Upload failed');
       }
 
-      const data = await response.json();
       imageUrls.push(data.secure_url);
     }
 
     // 2. Sauvegarde Firestore
     const product = {
       ...productData,
-      images: imageUrls, // Ici, le tableau ne sera plus vide !
+      images: imageUrls,
       whatsappClickCount: 0,
       status: 'active' as const,
       createdAt: serverTimestamp(),
     };
 
     const docRef = await addDoc(collection(db, 'products'), product);
-
-    // 3. Update Compteur
-    await updateDoc(doc(db, 'users', productData.sellerId), {
-      publicationCount: increment(1),
-    });
-
     return docRef.id;
-  } catch (error) {
-    console.error('Erreur createProduct:', error);
+
+  } catch (error: any) {
+    alert("Erreur de publication : " + error.message);
     throw error;
   }
 }
