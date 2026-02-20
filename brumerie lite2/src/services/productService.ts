@@ -67,14 +67,65 @@ export async function getProducts(filters?: {
   searchTerm?: string;
 }): Promise<Product[]> {
   try {
-    const q = query(
+    // Version simplifiée sans tri pour éviter l'erreur d'index Firestore
+    let q = query(
       collection(db, 'products'),
-      where('sellerId', '==', sellerId),
-      where('status', '==', 'active'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'active')
     );
 
-    // Appliquer filtres
+    // Appliquer filtres de catégorie et quartier si présents
+    if (filters?.category && filters.category !== 'all') {
+      q = query(q, where('category', '==', filters.category));
+    }
+
+    if (filters?.neighborhood && filters.neighborhood !== 'all') {
+      q = query(q, where('neighborhood', '==', filters.neighborhood));
+    }
+
+    const snapshot = await getDocs(q);
+    
+    // On récupère les données et on fait le tri manuellement en JavaScript
+    let products = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      // Sécurité si la date n'est pas encore générée par le serveur
+      createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
+    })) as Product[];
+
+    // Tri manuel par date (du plus récent au plus ancien)
+    products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    // Filtre recherche textuelle
+    if (filters?.searchTerm) {
+      const searchLower = filters.searchTerm.toLowerCase();
+      products = products.filter(p =>
+        p.title.toLowerCase().includes(searchLower) ||
+        p.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return products;
+  } catch (error) {
+    console.error('Error getting products:', error);
+    return [];
+  }
+}
+
+//**
+ * Récupérer tous les produits (Page d'accueil)
+ */
+export async function getProducts(filters?: {
+  category?: string;
+  neighborhood?: string;
+  searchTerm?: string;
+}): Promise<Product[]> {
+  try {
+    // On retire le orderBy pour éviter l'erreur d'index Firestore
+    let q = query(
+      collection(db, 'products'),
+      where('status', '==', 'active')
+    );
+
     if (filters?.category && filters.category !== 'all') {
       q = query(q, where('category', '==', filters.category));
     }
@@ -87,10 +138,13 @@ export async function getProducts(filters?: {
     let products = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp).toDate(),
+      // Sécurité pour la date
+      createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
-    // Filtre recherche (côté client pour simplicité V1)
+    // Tri manuel par date (du plus récent au plus ancien)
+    products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
     if (filters?.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
       products = products.filter(p =>
@@ -107,42 +161,26 @@ export async function getProducts(filters?: {
 }
 
 /**
- * Récupérer un produit par ID
- */
-export async function getProductById(productId: string): Promise<Product | null> {
-  try {
-    const productDoc = await getDoc(doc(db, 'products', productId));
-    if (!productDoc.exists()) return null;
-
-    return {
-      id: productDoc.id,
-      ...productDoc.data(),
-      createdAt: (productDoc.data().createdAt as Timestamp).toDate(),
-    } as Product;
-  } catch (error) {
-    console.error('Error getting product:', error);
-    return null;
-  }
-}
-
-/**
- * Récupérer les produits d'un vendeur
+ * Récupérer les produits d'un vendeur (Page Profil)
  */
 export async function getSellerProducts(sellerId: string): Promise<Product[]> {
   try {
+    // Suppression du orderBy ici aussi
     const q = query(
       collection(db, 'products'),
       where('sellerId', '==', sellerId),
-      where('status', '==', 'active'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'active')
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    const products = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp).toDate(),
+      createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
+
+    // Tri manuel JavaScript avant de renvoyer les produits au profil
+    return products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error('Error getting seller products:', error);
     return [];
