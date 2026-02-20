@@ -33,7 +33,7 @@ export function EditProfilePage({ onBack, onSaved }: EditProfilePageProps) {
     setPhotoPreview(URL.createObjectURL(compressed));
   };
 
-  const handleSave = async () => {
+    const handleSave = async () => {
     if (!currentUser || !userProfile) return;
     if (!name.trim() || !phone.trim() || !neighborhood) {
       setError('Tous les champs sont obligatoires');
@@ -41,23 +41,40 @@ export function EditProfilePage({ onBack, onSaved }: EditProfilePageProps) {
     }
     setLoading(true);
     setError('');
+    
     try {
-      let photoURL = userProfile.photoURL;
+      let photoURL = userProfile.photoURL || ''; // Sécurité : jamais undefined
+
+      // SI L'UTILISATEUR A CHOISI UNE NOUVELLE PHOTO
       if (photoFile) {
-        const storageRef = ref(storage, `avatars/${currentUser.uid}`);
-        await uploadBytes(storageRef, photoFile);
-        photoURL = await getDownloadURL(storageRef);
+        const formData = new FormData();
+        formData.append('file', photoFile);
+        formData.append('upload_preset', 'brumerie_preset'); // Ton preset Cloudinary
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/dk8kfgmqx/image/upload`, // Ton Cloud Name
+          { method: 'POST', body: formData }
+        );
+
+        if (!response.ok) throw new Error("Échec de l'upload de la photo");
+
+        const data = await response.json();
+        photoURL = data.secure_url; // On récupère le lien Cloudinary
       }
+
+      // SAUVEGARDE DANS FIRESTORE
       await updateDoc(doc(db, 'users', currentUser.uid), {
         name: name.trim(),
         phone: phone.trim(),
         neighborhood,
-        ...(photoURL ? { photoURL } : {}),
+        photoURL: photoURL, // On enregistre le lien Cloudinary ici
       });
+
       setSuccess(true);
       setTimeout(() => onSaved(), 1500);
-    } catch (err) {
-      setError('Erreur lors de la sauvegarde. Réessaie.');
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erreur : ${err.message || 'Réessaie.'}`);
     } finally {
       setLoading(false);
     }
