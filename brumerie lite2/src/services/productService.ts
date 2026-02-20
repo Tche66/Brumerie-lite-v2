@@ -7,9 +7,7 @@ import {
   doc,
   query,
   where,
-  orderBy,
   updateDoc,
-  deleteDoc,
   serverTimestamp,
   Timestamp,
   increment
@@ -26,7 +24,6 @@ export async function createProduct(
   imageFiles: File[]
 ): Promise<string> {
   try {
-    // 1. Upload images
     const imageUrls: string[] = [];
     for (const file of imageFiles) {
       const imageRef = ref(storage, `products/${productData.sellerId}/${Date.now()}_${file.name}`);
@@ -35,7 +32,6 @@ export async function createProduct(
       imageUrls.push(url);
     }
 
-    // 2. Créer le produit
     const product = {
       ...productData,
       images: imageUrls,
@@ -46,7 +42,6 @@ export async function createProduct(
 
     const docRef = await addDoc(collection(db, 'products'), product);
 
-    // 3. Incrémenter le compteur de publications de l'utilisateur
     await updateDoc(doc(db, 'users', productData.sellerId), {
       publicationCount: increment(1),
     });
@@ -59,7 +54,7 @@ export async function createProduct(
 }
 
 /**
- * Récupérer tous les produits (avec filtres optionnels)
+ * Récupérer tous les produits (Page d'accueil) - UNE SEULE FOIS
  */
 export async function getProducts(filters?: {
   category?: string;
@@ -67,60 +62,6 @@ export async function getProducts(filters?: {
   searchTerm?: string;
 }): Promise<Product[]> {
   try {
-    // Version simplifiée sans tri pour éviter l'erreur d'index Firestore
-    let q = query(
-      collection(db, 'products'),
-      where('status', '==', 'active')
-    );
-
-    // Appliquer filtres de catégorie et quartier si présents
-    if (filters?.category && filters.category !== 'all') {
-      q = query(q, where('category', '==', filters.category));
-    }
-
-    if (filters?.neighborhood && filters.neighborhood !== 'all') {
-      q = query(q, where('neighborhood', '==', filters.neighborhood));
-    }
-
-    const snapshot = await getDocs(q);
-    
-    // On récupère les données et on fait le tri manuellement en JavaScript
-    let products = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      // Sécurité si la date n'est pas encore générée par le serveur
-      createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
-    })) as Product[];
-
-    // Tri manuel par date (du plus récent au plus ancien)
-    products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    // Filtre recherche textuelle
-    if (filters?.searchTerm) {
-      const searchLower = filters.searchTerm.toLowerCase();
-      products = products.filter(p =>
-        p.title.toLowerCase().includes(searchLower) ||
-        p.description.toLowerCase().includes(searchLower)
-      );
-    }
-
-    return products;
-  } catch (error) {
-    console.error('Error getting products:', error);
-    return [];
-  }
-}
-
-//**
- * Récupérer tous les produits (Page d'accueil)
- */
-export async function getProducts(filters?: {
-  category?: string;
-  neighborhood?: string;
-  searchTerm?: string;
-}): Promise<Product[]> {
-  try {
-    // On retire le orderBy pour éviter l'erreur d'index Firestore
     let q = query(
       collection(db, 'products'),
       where('status', '==', 'active')
@@ -138,11 +79,10 @@ export async function getProducts(filters?: {
     let products = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      // Sécurité pour la date
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
-    // Tri manuel par date (du plus récent au plus ancien)
+    // Tri manuel par date
     products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     if (filters?.searchTerm) {
@@ -165,7 +105,6 @@ export async function getProducts(filters?: {
  */
 export async function getSellerProducts(sellerId: string): Promise<Product[]> {
   try {
-    // Suppression du orderBy ici aussi
     const q = query(
       collection(db, 'products'),
       where('sellerId', '==', sellerId),
@@ -179,7 +118,6 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
-    // Tri manuel JavaScript avant de renvoyer les produits au profil
     return products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error('Error getting seller products:', error);
@@ -197,25 +135,6 @@ export async function markProductAsSold(productId: string): Promise<void> {
     });
   } catch (error) {
     console.error('Error marking product as sold:', error);
-    throw error;
-  }
-}
-
-/**
- * Supprimer un produit
- */
-export async function deleteProduct(productId: string, sellerId: string): Promise<void> {
-  try {
-    await updateDoc(doc(db, 'products', productId), {
-      status: 'deleted',
-    });
-
-    // Décrémenter compteur publications
-    await updateDoc(doc(db, 'users', sellerId), {
-      publicationCount: increment(-1),
-    });
-  } catch (error) {
-    console.error('Error deleting product:', error);
     throw error;
   }
 }
@@ -254,7 +173,6 @@ export async function canUserPublish(userId: string): Promise<{
     const lastReset = userData.lastPublicationReset?.toDate() || new Date(0);
     const now = new Date();
 
-    // Réinitialiser si nouveau mois
     if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
       await updateDoc(doc(db, 'users', userId), {
         publicationCount: 0,
@@ -264,12 +182,7 @@ export async function canUserPublish(userId: string): Promise<{
     }
 
     if (count >= limit) {
-      return {
-        canPublish: false,
-        reason: `Limite atteinte (${limit} produits/mois)`,
-        count,
-        limit,
-      };
+      return { canPublish: false, reason: `Limite atteinte (${limit} produits/mois)`, count, limit };
     }
 
     return { canPublish: true, count, limit };
@@ -279,28 +192,17 @@ export async function canUserPublish(userId: string): Promise<{
   }
 }
 
-// ============ VERIFICATION & FEEDBACK SERVICES ============
-
 /**
- * Soumettre une demande de vérification → redirige vers WhatsApp
+ * WhatsApp & Feedback Services
  */
 export function requestVerificationViaWhatsApp(user: { name: string; email: string; phone: string }) {
-  const msg = `🏅 *Demande de badge Vendeur Vérifié - Brumerie*\n\n👤 Nom : ${user.name}\n📧 Email : ${user.email}\n📱 Téléphone : ${user.phone}\n\nJ'ai effectué le paiement de 2 000 FCFA et je souhaite activer mon badge de confiance.`;
-  const encoded = encodeURIComponent(msg);
-  return `https://wa.me/22586867693?text=${encoded}`;
+  const msg = `🏅 *Demande de badge Vendeur Vérifié - Brumerie*\n\n👤 Nom : ${user.name}\n📱 Tél : ${user.phone}\n\nJe souhaite activer mon badge.`;
+  return `https://wa.me/22586867693?text=${encodeURIComponent(msg)}`;
 }
 
-/**
- * Envoyer un feedback par email via mailto
- */
 export function sendFeedbackViaEmail(feedback: { type: string; message: string; name: string; email: string }) {
-  const subjects: Record<string, string> = {
-    bug: 'Bug Report - Brumerie',
-    suggestion: 'Suggestion - Brumerie',
-    question: 'Question Support - Brumerie',
-    complaint: 'Réclamation - Brumerie',
-  };
-  const subject = encodeURIComponent(subjects[feedback.type] || 'Message - Brumerie');
-  const body = encodeURIComponent(`De: ${feedback.name} (${feedback.email})\n\n${feedback.message}`);
+  const subject = encodeURIComponent(`Feedback Brumerie - ${feedback.type}`);
+  const body = encodeURIComponent(`De: ${feedback.name}\n\n${feedback.message}`);
   return `mailto:brumerieciv.email@gmail.com?subject=${subject}&body=${body}`;
 }
+
