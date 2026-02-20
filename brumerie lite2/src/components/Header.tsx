@@ -19,14 +19,13 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
         {/* Top row */}
         <div className="flex items-center justify-between mb-3">
 
-          {/* Logo horizontal */}
+          {/* Logo VERTICAL compact dans le header */}
           <div className="flex items-center">
             <img
-              src="/assets/logos/logo-horizontal.png"
+              src="/assets/logos/logo-vertical.png"
               alt="Brumerie"
-              className="h-9 w-auto object-contain"
+              className="h-10 w-auto object-contain"
               onError={(e) => {
-                // Fallback si l'image n'est pas encore uploadée
                 e.currentTarget.style.display = 'none';
                 const parent = e.currentTarget.parentElement;
                 if (parent) {
@@ -35,7 +34,7 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
                       <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#15803D,#22C55E);display:flex;align-items:center;justify-content:center">
                         <span style="color:white;font-weight:800;font-size:14px;font-family:Syne,sans-serif">B</span>
                       </div>
-                      <span style="font-size:20px;font-weight:800;font-family:Syne,sans-serif;background:linear-gradient(135deg,#15803D,#16A34A);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Brumerie</span>
+                      <span style="font-size:18px;font-weight:800;font-family:Syne,sans-serif;background:linear-gradient(135deg,#15803D,#16A34A);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Brumerie</span>
                     </div>
                   `;
                 }
@@ -51,11 +50,7 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
                 className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-green-100 hover:border-green-500 transition-all duration-200"
               >
                 {userProfile.photoURL ? (
-                  <img
-                    src={userProfile.photoURL}
-                    alt={userProfile.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={userProfile.photoURL} alt={userProfile.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-green-50 flex items-center justify-center">
                     <span className="text-green-600 font-bold text-sm">
@@ -73,9 +68,7 @@ export function Header({ onProfileClick, onSearchChange, searchTerm = '' }: Head
 
         {/* Barre de recherche */}
         <div className={`relative transition-all duration-200 ${focused ? 'scale-[1.01]' : ''}`}>
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">
-            🔍
-          </span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">🔍</span>
           <input
             type="text"
             placeholder="Chercher un article, une marque..."
