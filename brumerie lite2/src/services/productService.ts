@@ -8,7 +8,6 @@ import {
   query,
   where,
   updateDoc,
-  deleteDoc,
   serverTimestamp,
   Timestamp,
   increment
@@ -17,41 +16,42 @@ import { db } from '@/config/firebase';
 import { Product } from '@/types';
 
 /**
- * Publier un nouveau produit avec Cloudinary
+ * Publier un produit (Version Ultra-Robuste)
  */
 export async function createProduct(
   productData: Omit<Product, 'id' | 'createdAt' | 'whatsappClickCount' | 'status'>,
   imageFiles: File[]
 ): Promise<string> {
   try {
-    // 1. Upload images vers Cloudinary
     const imageUrls: string[] = [];
     
+    // 1. Upload vers Cloudinary
     for (const file of imageFiles) {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+      // On utilise la variable Netlify ou 'ml_default' par défaut
+      const preset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+      formData.append('upload_preset', preset);
 
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
+        `https://api.cloudinary.com/v1_1/dk8kfgmqx/image/upload`, // Cloud Name forcé ici
+        { method: 'POST', body: formData }
       );
 
       if (!response.ok) {
-        throw new Error('Erreur lors de l\'upload vers Cloudinary');
+        const errorDetail = await response.json();
+        console.error('Erreur Cloudinary détaillée:', errorDetail);
+        throw new Error('Échec de l\'envoi de l\'image');
       }
 
       const data = await response.json();
-      imageUrls.push(data.secure_url); // On récupère l'URL publique Cloudinary
+      imageUrls.push(data.secure_url);
     }
 
-    // 2. Créer le produit dans Firestore
+    // 2. Sauvegarde Firestore
     const product = {
       ...productData,
-      images: imageUrls,
+      images: imageUrls, // Ici, le tableau ne sera plus vide !
       whatsappClickCount: 0,
       status: 'active' as const,
       createdAt: serverTimestamp(),
@@ -59,20 +59,20 @@ export async function createProduct(
 
     const docRef = await addDoc(collection(db, 'products'), product);
 
-    // 3. Incrémenter le compteur de l'utilisateur
+    // 3. Update Compteur
     await updateDoc(doc(db, 'users', productData.sellerId), {
       publicationCount: increment(1),
     });
 
     return docRef.id;
   } catch (error) {
-    console.error('Error creating product:', error);
+    console.error('Erreur createProduct:', error);
     throw error;
   }
 }
 
 /**
- * Récupérer tous les produits (Page d'accueil)
+ * Récupérer les produits (Accueil)
  */
 export async function getProducts(filters?: {
   category?: string;
@@ -96,7 +96,7 @@ export async function getProducts(filters?: {
       createdAt: doc.data().createdAt ? (doc.data().createdAt as Timestamp).toDate() : new Date(),
     })) as Product[];
 
-    // Tri manuel par date (récent -> ancien)
+    // Tri manuel par date
     products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     if (filters?.searchTerm) {
@@ -108,13 +108,13 @@ export async function getProducts(filters?: {
     }
     return products;
   } catch (error) {
-    console.error('Error getting products:', error);
+    console.error('Erreur getProducts:', error);
     return [];
   }
 }
 
 /**
- * Récupérer les produits d'un vendeur (Page Profil)
+ * Récupérer les produits d'un vendeur (Profil)
  */
 export async function getSellerProducts(sellerId: string): Promise<Product[]> {
   try {
@@ -132,7 +132,6 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
     
     return products.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
-    console.error('Error getting seller products:', error);
     return [];
   }
 }
@@ -141,36 +140,22 @@ export async function getSellerProducts(sellerId: string): Promise<Product[]> {
  * Marquer comme vendu
  */
 export async function markProductAsSold(productId: string): Promise<void> {
-  try {
-    await updateDoc(doc(db, 'products', productId), { status: 'sold' });
-  } catch (error) {
-    console.error('Error marking product as sold:', error);
-    throw error;
-  }
+  await updateDoc(doc(db, 'products', productId), { status: 'sold' });
 }
 
 /**
  * Supprimer un produit
  */
 export async function deleteProduct(productId: string, sellerId: string): Promise<void> {
-  try {
-    await updateDoc(doc(db, 'products', productId), { status: 'deleted' });
-    await updateDoc(doc(db, 'users', sellerId), { publicationCount: increment(-1) });
-  } catch (error) {
-    console.error('Error deleting product:', error);
-    throw error;
-  }
+  await updateDoc(doc(db, 'products', productId), { status: 'deleted' });
+  await updateDoc(doc(db, 'users', sellerId), { publicationCount: increment(-1) });
 }
 
 /**
  * Compteur WhatsApp
  */
 export async function incrementWhatsAppClick(productId: string): Promise<void> {
-  try {
-    await updateDoc(doc(db, 'products', productId), { whatsappClickCount: increment(1) });
-  } catch (error) {
-    console.error('Error incrementing WhatsApp click:', error);
-  }
+  await updateDoc(doc(db, 'products', productId), { whatsappClickCount: increment(1) });
 }
 
 /**
@@ -189,14 +174,7 @@ export async function canUserPublish(userId: string): Promise<{
     const userData = userDoc.data();
     const count = userData.publicationCount || 0;
     const limit = userData.publicationLimit || 50;
-    const lastReset = userData.lastPublicationReset?.toDate() || new Date(0);
-    const now = new Date();
-
-    if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
-      await updateDoc(doc(db, 'users', userId), { publicationCount: 0, lastPublicationReset: serverTimestamp() });
-      return { canPublish: true, count: 0, limit };
-    }
-
+    
     if (count >= limit) return { canPublish: false, reason: `Limite mensuelle atteinte`, count, limit };
     return { canPublish: true, count, limit };
   } catch (error) {
@@ -204,11 +182,8 @@ export async function canUserPublish(userId: string): Promise<{
   }
 }
 
-/**
- * Services Externes (WhatsApp & Email)
- */
 export function requestVerificationViaWhatsApp(user: { name: string; phone: string }) {
-  const msg = `🏅 *Demande de badge Vendeur Vérifié - Brumerie*\n👤 Nom : ${user.name}\n📱 Tél : ${user.phone}`;
+  const msg = `🏅 Demande badge Vendeur Vérifié - ${user.name}`;
   return `https://wa.me/22586867693?text=${encodeURIComponent(msg)}`;
 }
 
