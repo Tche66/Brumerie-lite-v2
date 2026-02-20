@@ -67,8 +67,9 @@ export async function getProducts(filters?: {
   searchTerm?: string;
 }): Promise<Product[]> {
   try {
-    let q = query(
+    const q = query(
       collection(db, 'products'),
+      where('sellerId', '==', sellerId),
       where('status', '==', 'active'),
       orderBy('createdAt', 'desc')
     );
